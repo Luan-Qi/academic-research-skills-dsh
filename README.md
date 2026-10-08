@@ -98,19 +98,17 @@ node build/install-user-skills.mjs --uninstall
 **不碰你已有的技能**。
 
 > ⚠️ **代价必须知道**：
-> 1. **要改 profile**：`@deepseek-ai/dsh-web-app` 把 `skill-filesystem` 补丁成
->    `disabled: true`，而它是唯一会扫描 `~/.dsh/skills` 的组件。需要在 profile 的
->    **用户补丁层**（`~/.dsh/profiles/web/cordis.patch.yml`，在所有 bundle 层之后应用）写：
->    ```yaml
->    - id: skill-filesystem
->      disabled: false
->    ```
->    改完可用 `dsh --profile web --dump-config` **不启动服务**就验证是否生效。
-> 2. **体积约 24 MB / 1232 文件**（`scripts/` 独占 11.3 MB）。
-> 3. **必须改写约 3,500 条引用**：DSH 给模型的基准是**技能目录**，而上游用**仓库根相对**
+> 1. **体积约 24 MB / 1232 文件**（`scripts/` 独占 11.3 MB）。
+> 2. **必须改写约 3,500 条引用**：DSH 给模型的基准是**技能目录**，而上游用**仓库根相对**
 >    路径写 `shared/`、`scripts/`、`docs/`、`<其它技能>/agents/`。安装器只给
 >    “在根能找到、在技能目录找不到”的引用加 `../`，改完会自查并报告无法解释的悬空。
-> 4. 装完请**移除插件**：`user-dsh` 的 rank 是 400、插件 provider 是 600，
+> 3. 装完请**移除插件**：`user-dsh` 的 rank 是 400、插件 provider 是 600，
+>    两份并存时用户技能那份会**静默遮蔽**插件那份。
+> 4. **不需要改 profile。** `~/.dsh/skills` 本来就已被扫描：`web` 里由默认 agent preset 的
+>    `skill-filesystem` 负责，TUI/headless 里由 base 的 host 行负责。
+>    `@deepseek-ai/dsh-web-app` 关掉的只是 **host 平面**那一行，因为 web 把 agent 平面移到了
+>    per-session 的 preset 里（厂商原话："the base host `skill-filesystem` row is disabled here
+>    — presets own local discovery"）。
 >    两份并存时用户技能那份会**静默遮蔽**插件那份。
 
 细节、实测数据与回滚步骤见 [PORTING-NOTES.md](PORTING-NOTES.md) §2 P17 / P18。
@@ -266,8 +264,12 @@ files are added or removed — so **editing a skill file needs no restart**.
 (5 directory bundles + 39 flat command files). It rewrites ~3,500 references to `../` because DSH
 anchors a skill at its own directory while upstream writes repo-root-relative paths, and it keeps
 an ownership manifest so re-runs never touch your own skills. **Costs:** ~24 MB, and you must
-re-enable `skill-filesystem` in your profile — `@deepseek-ai/dsh-web-app` ships it
-`disabled: true`, so `~/.dsh/skills` is not scanned otherwise. See PORTING-NOTES §2 P17/P18.
+remove the plugin afterwards (the `user-dsh` root ranks 400 and would silently shadow the
+plugin's 600). **No profile change is needed:** `~/.dsh/skills` is already scanned — in `web` by
+the default agent preset's own `skill-filesystem`, and in TUI/headless by the base host row. The
+`disabled: true` you see on the host row in a `web` dump means *discovery moved to the per-session
+preset plane* ("the base host `skill-filesystem` row is disabled here — presets own local
+discovery"), not that user skills are off. See PORTING-NOTES §2 P17/P18.
 
 ## Differences from upstream
 

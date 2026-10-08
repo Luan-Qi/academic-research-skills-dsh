@@ -255,14 +255,35 @@ node build/audit-refs.mjs                                      # 本包
      改盘上文件要重启才生效。
   3. **“不能中途关闭”** —— **成立**。运行期注册只在插件 fiber 被销毁（=重启）时释放；
      同层同名 runtime 注册还是 **first-wins**（重复注册拿到 no-op disposer），连“注销再注册”都做不到。
-- **关键事实（决定了不能改成“常规用户技能”）**：`dsh --profile web --dump-config` 显示
-  **`skill-filesystem` 这一行是 `disabled: true`**（由 `@deepseek-ai/dsh-web-app` 打的补丁）。
-  也就是说 web profile 里**根本没有被扫描的技能根目录**，`~/.dsh/skills/` 不被读取
-  （本会话技能目录里只有本插件的 5 个技能，用户原有的 `bys-travel-plan` 并未出现，可为证）；
-  web 的技能入口是 **`dshmarket`**（可视化市场，自己 git clone 一份仓库到
-  `~/.dsh/skills-management/market/`）。
-  → “把它放进一个普通文件夹就当用户技能”在 web profile 里**做不到**，除非**覆盖 web app 的这条刻意补丁**
-  （那还会连带启用其它目录扫描，等于改用户的 profile 语义，本包不做）。
+- **关键事实（第一版写错了，此处为更正）**：`dsh --profile web --dump-config` 显示 **host 平面**的
+  `skill-filesystem` 是 `disabled: true`（由 `@deepseek-ai/dsh-web-app` 打补丁）。
+  我最初据此断言"web profile 里 `~/.dsh/skills` 不被扫描"，**这是错的**。读 `dsh-web-app` 自带的
+  `cordis.patch.yml` 才发现厂商把理由写在里面：
+
+  > the agent plane moves behind agent presets … The base keeps them for the TUI, which is single-session
+  > and composes its agent process-wide; the Web surface disables them here and lets each session mount a
+  > preset instead. Disabling rather than deleting is deliberate: the base is shared, and a row absent from
+  > a surface overlay would silently reappear the day someone reorders the composition.
+  >
+  > The `skill` REGISTRY stays in the host plane. It is host+per-scope layered: deployment-level providers —
+  > repository plugins, a host skill-filesystem row — register into its global layer, while a preset's
+  > `skill-filesystem` registers into that preset's layer, and each agent reads the merged catalog its scope
+  > chain selects. Only the per-agent rows move behind presets: **the base host `skill-filesystem` row is
+  > disabled here (presets own local discovery)**, and `tool-skill` is what a preset mounts to give its agent
+  > the catalog and loader at all.
+
+  也就是说：**不是"关掉了用户技能"，而是"把发现从进程平面移到了 per-session preset 平面"**。
+  随包的默认 preset（`dsh-agent-presets/presets/standard/agent.cordis.yml`，web app 里 `default: standard`）
+  自己挂了 `skill-filesystem` 且**不写 config** → 用默认根，其中就包含 `<dshHome>/skills`（rank 400，
+  source `user-dsh`）。TUI/headless 则用 base 的 host 行（默认启用）。**两条路都扫 `~/.dsh/skills`。**
+
+  我当初的"证据"（本会话技能目录里没看到 `bys-travel-plan`）**也不成立**：它自己的 frontmatter 写了
+  `disable-model-invocation: true`，属于**用户可调用但不进模型目录**的技能，所以本来就不该出现在
+  模型侧目录里 —— 它只出现在 `/` 菜单。
+
+  → 结论：**方式 B 根本不需要改 profile**。我后来写的那条 `disabled: false` 补丁是多余的
+  （它会在 global 层再加一个扫同样根目录的 provider：对 preset 作用域的 agent 来说更近的 preset 层会赢，
+  所以行为上被遮蔽，但等于白扫一遍、白挂一套 watcher，还让 `--dump-config` 更难读）——**已撤回**。
 - **修法**：改用 DSH 文档化的扩展点 `ctx.skills.registerProvider(...)`，在 `lib/startup.js` 里实现
   **磁盘支撑的 provider**：
   - `list()` 只解析 frontmatter，发布 5 技能 + 39 命令的摘要；
@@ -289,12 +310,14 @@ node build/audit-refs.mjs                                      # 本包
 ### P18 【交付方式·可选】把技能装成 `~/.dsh/skills/` 下的常规用户技能
 - **触发**：用户明确要求技能必须是 `~/.dsh/skills` 下的**用户技能**（既不是嵌入技能，也不是 provider 交付）。
 - **必须付的代价（先说清）**：
-  1. **要改 profile**：web profile 里 `skill-filesystem` 被 `@deepseek-ai/dsh-web-app` 补丁成
-     `disabled: true`，`~/.dsh/skills/` 根本不被扫描；不重新启用它，装进去也不会加载。
-  2. **必须改写引用**：DSH 给模型的基准是**技能目录**（目录 bundle 的 `<root>/<name>`），
+  1. **必须改写引用**：DSH 给模型的基准是**技能目录**（目录 bundle 的 `<root>/<name>`），
      而上游 ARS 用**仓库根相对**路径写 `shared/`、`scripts/`、`docs/`、`<其它技能>/agents/`。
      搬进用户技能根就必须给这一类引用加 `../`，否则重演 211 条悬空。
-  3. **体积**：1232 文件 / 24.20 MB（`scripts/` 632 文件独占 11.3 MB，是主要开销）。
+  2. **体积**：1232 文件 / 24.20 MB（`scripts/` 632 文件独占 11.3 MB，是主要开销）。
+  3. **不要与插件并存**：`user-dsh` 的 rank 是 400、插件 provider 是 600，rank 低的赢 →
+     用户技能那份会**静默遮蔽**插件那份。
+  4. **不需要改 profile**（这是 P17 更正的直接结果）：`~/.dsh/skills` 本来就**已经**被扫描 ——
+     web 里由默认 agent preset 的 `skill-filesystem` 负责，TUI/headless 里由 base 的 host 行负责。
 - **实现**：`build/install-user-skills.mjs`，可反复运行、可 `--uninstall`、可 `--verify`、`--slim`：
   - 复制 5 个技能（目录 bundle）+ `shared/`、`scripts/`、`docs/`、`evals/`、`examples/`、`audits/`
     与 `MODE_REGISTRY.md` 等根级文件；
@@ -310,16 +333,18 @@ node build/audit-refs.mjs                                      # 本包
   自查 **4 条无法解析、且全部属于已记录类别 → 0 条无法解释**。
 - **已执行的环境切换（用户确认后）**：
   1. 备份 `~/.dsh/profiles/web/{cordis.patch.yml,package.json}`；
-  2. 在 profile 的**用户补丁层**（`cordis.patch.yml`，在所有 bundle 层**之后**应用）写入
-     `- id: skill-filesystem` / `disabled: false`，覆盖 web app 的关闭；
-     用 `dsh --profile web --dump-config`（**不启动服务即可验证**）确认该行变成 `disabled: false`
-     且 dump 里标注了补丁来源；
+  2. 曾按"web 关掉了 skill-filesystem"的判断在 profile 的**用户补丁层**写入
+     `- id: skill-filesystem` / `disabled: false`，并用 `dsh --profile web --dump-config`
+     （不启动服务即可验证）确认它生效、dump 里也标出了补丁来源；
   3. `dsh plugin --profile web remove academic-research-skills-dsh` —— 对账逻辑自动把它从
      `dependencies` 与 `dsh.profile.bundles` 双双移除（已核对）。
+  4. **随后撤回了第 2 步**：读 `dsh-web-app` 自带注释后确认那条 host 行被关是**"preset 接管本地发现"**
+     的设计，而非"用户技能不可用"；preset 的 `skill-filesystem` 用默认根，已包含 `~/.dsh/skills`。
+     多留一个 host 层 provider 只会白扫一遍、白挂一套 watcher。`cordis.patch.yml` 已还原为 `[]`。
 - **切换后可发现性核对**（`build/verify-user-skills.mjs`，按 provider 的发现契约复刻）：
-  发布 **6 个目录 bundle**（本包 5 个技能 + 用户原有的 `bys-travel-plan`，此前因该 provider 被关而一直没被加载）
-  与 **39 个平铺命令**；13 个条目会被 provider 跳过并各打一条无害警告（6 个资源目录 + 4 个无 frontmatter 的
-  说明文件 + 非 `.md` 文件）。
+  发布 **6 个目录 bundle**（本包 5 个技能 + 用户原有的 `bys-travel-plan`。注意它自己的 frontmatter 是
+  `disable-model-invocation: true`，所以它**只在 `/` 菜单里可见，不进模型侧目录**）+ **39 个平铺命令**；
+  13 个条目会被 provider 跳过并各打一条无害警告（6 个资源目录 + 4 个无 frontmatter 的说明文件 + 非 `.md` 文件）。
 - **回滚**：`Copy-Item <备份> cordis.patch.yml -Force`，再
   `dsh plugin --profile web add <本包绝对路径>`，
   必要时 `node build/install-user-skills.mjs --uninstall`。
@@ -387,14 +412,17 @@ node build/audit-refs.mjs                                      # 本包
 10. **未随包分发的上游仓库内容不影响运行时**：`tests/`（342）、`tools/`（6）、
     `plugin-evals*`（107）、`pi/`（4）、`.github/`（17）、`.claude-plugin/`（2）均为
     CI / 开发 / Claude Code 打包用途，方法论层不依赖它们。
-11. **这些技能不是“文件夹用户技能”，而且在 web profile 里也做不到**（见 P17）。
-    `@deepseek-ai/dsh-web-app` 把 `skill-filesystem` 补丁成 `disabled: true`，
-    所以 web profile 没有扫描的技能根目录，`~/.dsh/skills/` 不被读取；web 的技能入口是 `dshmarket`。
-    本包因此通过 provider 交付（正文每次从磁盘读、增删文件即生效），**不去覆盖 web app 的这条配置**——
-    覆盖它会一并启用其它目录扫描，属于改用户的 profile 语义。
-    如果你确实想要“普通文件夹技能”，可行做法是在 profile 的 `cordis.patch.yml` 里自行把
-    `skill-filesystem` 的 `disabled` 去掉并给它配置 `customSkillDirs: [<本包根>, <本包根>/commands]`；
-    代价是它也会开始扫描 `~/.dsh/skills` 与项目 `.dsh/skills`，且与 web app 的既有意图相左，所以本包不默认这么做。
+11. **`~/.dsh/skills` 本来就已被扫描；`skill-filesystem` 的 host 行被关不是这个意思**（见 P17 更正）。
+    `@deepseek-ai/dsh-web-app` 把 **host 平面**那一行补丁成 `disabled: true`，厂商在文件里写明了理由：
+    web 把 **agent 平面移到 per-session 的 agent preset 里**，由 preset 自己挂 `skill-filesystem`
+    与 `tool-skill`（"the base host `skill-filesystem` row is disabled here (**presets own local discovery**)"）。
+    随包默认 preset `standard` 的 `skill-filesystem` **不写 config**，因此用默认根，其中含
+    `<dshHome>/skills`（rank 400，source `user-dsh`）；TUI/headless 则用 base 的 host 行（默认启用）。
+    另外 `skill` 注册表是 **host + per-scope 分层**的：**插件（repository plugins）注册进 global 层**，
+    每个 agent 读它 scope 链合并后的目录 —— 这正是方式 A 在 web 上零配置可用的原因。
+    → 所以"把技能放进 `~/.dsh/skills` 当用户技能"**不需要改任何 profile**；方式 B 的安装器只是把内容
+    复制到那里（并改写引用以适配"技能目录"这个锚点）。我一度加过一条 `disabled: false` 补丁，**已撤回**
+    （多余：会在 global 层再加一个扫同样根的 provider，白扫白挂 watcher，且被更近的 preset 层遮蔽）。
 12. **两个资源锚点**：本包在 `resourceBase` 里同时声明“插件根”与“本文件所在目录”两个锚点。
     这是上游 ARS 的既有约定（`shared/…` 相对仓库根，裸 `references/…` 相对技能目录），
     并非本包新增的歧义；`opaque` 型基准就是为这种情况准备的。
