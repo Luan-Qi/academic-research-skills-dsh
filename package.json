@@ -19,6 +19,7 @@
     "agents",
     "commands",
     "commands-src",
+    "cordis.patch.yml",
     "deep-research",
     "academic-paper",
     "academic-paper-reviewer",

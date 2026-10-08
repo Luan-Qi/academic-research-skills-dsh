@@ -224,6 +224,49 @@ if (canonicalBlock === null) {
   notes.push(`routing-core: ${copies}/${SKILL_NAMES.length} SKILL.md copies byte-identical to ${ROUTING_CORE}`);
 }
 
+// --- 3c: package-manifest completeness ------------------------------------
+// A git-hosted install (`dsh plugin add github:owner/repo`) is PACKED before it
+// is installed, so `package.json.files` decides what a user actually receives —
+// and a path that gets packed OUT fails at BOOT, not at install time. That is
+// not hypothetical: `cordis.patch.yml` was once missing from `files`, so the
+// installed package still declared `dsh.bundle.patch: ./cordis.patch.yml` while
+// the file was absent, and `dsh web` died with
+//   "failed to read overlay ... cordis.patch.yml: ENOENT"
+// The list below is every path the plugin needs to boot and resolve its
+// references; the bundle patch is checked separately because the manifest points
+// at it by name.
+const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+const listed = new Set(pkg.files ?? []);
+const REQUIRED_IN_FILES = [
+  'lib', // the provider entry point
+  'commands', // the /ars-* wrappers
+  ...SKILL_NAMES, // the five skill bundles
+  'shared',
+  'scripts',
+  'docs',
+  'evals',
+  'examples',
+  'audits', // trees the skill bodies reference
+  'MODE_REGISTRY.md',
+];
+for (const entry of REQUIRED_IN_FILES) {
+  if (!listed.has(entry)) {
+    fail('packaging', `package.json "files" omits "${entry}" — a git/npm install would not receive it`);
+  }
+}
+const bundlePatch = (pkg.dsh?.bundle?.patch ?? '').replace(/^\.\//, '');
+if (bundlePatch === '') {
+  fail('packaging', 'package.json declares no dsh.bundle.patch — dsh would never mount the plugin');
+} else {
+  if (!listed.has(bundlePatch)) {
+    fail('packaging', `dsh.bundle.patch points at "${bundlePatch}", which is not listed in "files"`);
+  }
+  if (!existsSync(join(ROOT, bundlePatch))) {
+    fail('packaging', `dsh.bundle.patch points at "${bundlePatch}", which does not exist`);
+  }
+}
+notes.push(`packaging: "files" covers ${REQUIRED_IN_FILES.length} runtime paths + the bundle patch`);
+
 // --- 4: MODE_REGISTRY coverage --------------------------------------------
 const registry = readFileSync(join(ROOT, 'MODE_REGISTRY.md'), 'utf8');
 const registryModes = new Map(); // skill -> Set(mode)

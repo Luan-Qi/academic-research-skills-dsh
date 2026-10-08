@@ -91,7 +91,25 @@ git push -u origin main
 
 ## 5. 发布后的安装验证（**必做，别跳**）
 
-用**一次性的 headless profile** 验证，不碰你自己的 `web` profile，也不起 web 服务：
+**先跑 5-pre：本地打包预检。** 这一步不需要网络、不需要 push，却能在推之前抓住最致命的一类
+bug —— `dsh plugin add github:` 是**先打包再安装**，所以 `package.json` 的 `files` 白名单
+决定了别人到底收到什么；漏掉的文件不会在安装时报错，而是**在启动时**炸：
+
+```bash
+# 5-pre. 打包预检：清单里点名的运行时文件必须真的进包
+npm pack --dry-run --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{
+  const f=JSON.parse(s)[0].files.map(x=>x.path);
+  const need=['cordis.patch.yml','lib/startup.js','commands/ars-plan.md'];
+  for (const n of need) console.log((f.includes(n)?'OK   ':'MISS ')+n);
+  console.log('packed files:', f.length);
+})"
+#   `MISS cordis.patch.yml` 就是真实发生过的事故：清单里 dsh.bundle.patch 指着它，
+#   文件却没进包 → 安装"成功"，但 `dsh web` 启动即 ENOENT:
+#   "failed to read overlay ... cordis.patch.yml"
+#   `npm run check` 里的 packaging 门禁会同时报错（validate-skills.mjs）。
+```
+
+然后用**一次性的 headless profile** 验证，不碰你自己的 `web` profile，也不起 web 服务：
 
 ```bash
 # 5a. 建临时 profile（从 headless 模板初始化；--dump-config 只组合配置不启动服务）
@@ -99,6 +117,10 @@ dsh --profile arscheck --from-default-profile headless --dump-config | head -5
 
 # 5b. 从 GitHub 安装（这一步才真正检验别人拿到仓库能不能装上）
 dsh plugin --profile arscheck add github:Luan-Qi/academic-research-skills-dsh
+
+# 5b'. 装完先确认包体完整（比启动更快发现问题）
+test -f ~/.dsh/profiles/arscheck/node_modules/academic-research-skills-dsh/cordis.patch.yml \
+  && echo "patch present" || echo "PATCH MISSING — files whitelist is broken"
 
 # 5c. 确认 bundle patch 进了配置树
 dsh --profile arscheck --dump-config | grep -A3 'academic-research-skills-dsh'
