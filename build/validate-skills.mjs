@@ -182,6 +182,48 @@ for (const [name, def] of loaded) {
   }
 }
 
+// --- 3b: routing-core cross-copy sync -------------------------------------
+// This is the invariant upstream's `scripts/check_routing_core_sync.py` checks.
+// That lint also requires a `.claude/CLAUDE.md` carrier, which this port
+// deliberately does not ship, so the check lives here instead: the routing core
+// is load-bearing (it decides whether a request routes straight to a skill or
+// the user is first asked which workflow they want — the failure #133 it
+// prevents), so the five SKILL.md copies must stay byte-identical to the
+// canonical block.
+const ROUTING_CORE = 'shared/references/routing_core.md';
+const RC_BEGIN = '<!-- routing-core:begin -->';
+const RC_END = '<!-- routing-core:end -->';
+
+/** The marker block of a file, or null when the marker pair is missing. */
+function routingCoreBlock(text) {
+  const begin = text.indexOf(RC_BEGIN);
+  const end = text.indexOf(RC_END);
+  if (begin === -1 || end === -1 || end < begin) return null;
+  const endLine = text.indexOf('\n', end);
+  return text.slice(begin, endLine === -1 ? undefined : endLine);
+}
+
+const canonicalBlock = routingCoreBlock(readFileSync(join(ROOT, ROUTING_CORE), 'utf8'));
+if (canonicalBlock === null) {
+  fail('routing-core', `${ROUTING_CORE} is missing the ${RC_BEGIN} / ${RC_END} marker pair`);
+} else {
+  let copies = 0;
+  for (const skill of SKILL_NAMES) {
+    const file = join(ROOT, skill, 'SKILL.md');
+    const block = existsSync(file) ? routingCoreBlock(readFileSync(file, 'utf8')) : null;
+    if (block === null) {
+      fail('routing-core', `${skill}/SKILL.md has no routing-core marker pair`);
+      continue;
+    }
+    if (block !== canonicalBlock) {
+      fail('routing-core', `${skill}/SKILL.md routing-core block differs from ${ROUTING_CORE}`);
+      continue;
+    }
+    copies += 1;
+  }
+  notes.push(`routing-core: ${copies}/${SKILL_NAMES.length} SKILL.md copies byte-identical to ${ROUTING_CORE}`);
+}
+
 // --- 4: MODE_REGISTRY coverage --------------------------------------------
 const registry = readFileSync(join(ROOT, 'MODE_REGISTRY.md'), 'utf8');
 const registryModes = new Map(); // skill -> Set(mode)

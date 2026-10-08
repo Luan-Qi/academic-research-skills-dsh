@@ -42,8 +42,6 @@ dsh plugin --profile web add /path/to/academic-research-skills-dsh
 
 然后**重启 `dsh web`**。插件在启动时注册进技能目录，热加载不覆盖这一层。
 
-**不需要**改 profile，也**不需要**往 `~/.dsh/skills/` 复制任何东西。
-
 ### 确认装好了
 
 1. 启动日志里出现：
@@ -104,16 +102,10 @@ node build/install-user-skills.mjs --uninstall
 >    “在根能找到、在技能目录找不到”的引用加 `../`，改完会自查并报告无法解释的悬空。
 > 3. 装完请**移除插件**：`user-dsh` 的 rank 是 400、插件 provider 是 600，
 >    两份并存时用户技能那份会**静默遮蔽**插件那份。
-> 4. **不需要改 profile。** `~/.dsh/skills` 本来就已被扫描：`web` 里由默认 agent preset 的
->    `skill-filesystem` 负责，TUI/headless 里由 base 的 host 行负责。
->    `@deepseek-ai/dsh-web-app` 关掉的只是 **host 平面**那一行，因为 web 把 agent 平面移到了
->    per-session 的 preset 里（厂商原话："the base host `skill-filesystem` row is disabled here
->    — presets own local discovery"）。
->    两份并存时用户技能那份会**静默遮蔽**插件那份。
 
 细节、实测数据与回滚步骤见 [PORTING-NOTES.md](PORTING-NOTES.md) §2 P17 / P18。
 
-## 学术诚信与能力边界（上游的诚实声明，原样保留）
+## 学术诚信与能力边界
 
 移植不改变上游对自己能力的界定，这些是**你应该知道**的：
 
@@ -185,9 +177,9 @@ npm run check:upstream   # 跑上游 116 个 lint 并分类（仅“所改表面
 | 脚本 | 作用 |
 |---|---|
 | `audit-refs.mjs` | 抽出模型能读到的每一条路径引用并逐条解析，报告悬空（支持 `--root` / `--layout`） |
-| `validate-skills.mjs` | 用 mock host 真实调用 `lib/startup.js`，校验发布结果、frontmatter、资源锚点、宿主残留 token、模式覆盖 |
+| `validate-skills.mjs` | 用 mock host 真实调用 `lib/startup.js`，校验发布结果、frontmatter、资源锚点、**路由核心跨副本一致性**、宿主残留 token、模式覆盖 |
 | `generate-commands.mjs` | 命令层唯一真源（39 条），`--check` 报漂移与孤儿 |
-| `generate-repo-docs.mjs` | 生成 `.claude/CLAUDE.md`（逐字节抽取路由核心块）与 `agents/` 镜像 |
+| `generate-repo-docs.mjs` | 同步 `agents/` 镜像（上游点名的 4 个可派发角色，字节一致） |
 | `normalize-host.mjs` | 宿主 token 级替换规则表（幂等，含显式禁用项与原因） |
 | `normalize-eol.mjs` | 行尾收敛到 LF（上游规范） |
 | `check-encoding.mjs` | 非法 UTF-8 与未解释 U+FFFD 门禁 |
@@ -207,7 +199,7 @@ node build/normalize-host.mjs        # 宿主 token 级替换（幂等）
 node build/normalize-eol.mjs --write # 收敛到 LF（上游规范）
 node build/port-edits.mjs            # 整段改写（一次性锚点；已在场会报 already applied）
 node build/generate-commands.mjs     # 重新生成 39 个命令
-node build/generate-repo-docs.mjs    # 重新生成 .claude/CLAUDE.md 与 agents/ 镜像
+node build/generate-repo-docs.mjs    # 重新同步 agents/ 镜像
 node build/refresh-content-locks.mjs --write   # 仅在确认差异都有意为之之后
 npm run check && npm run check:upstream
 ```

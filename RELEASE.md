@@ -169,7 +169,7 @@ node build/normalize-host.mjs        # 宿主 token 级替换（幂等；重复�
 node build/normalize-eol.mjs --write # 收敛到 LF
 node build/port-edits.mjs            # 整段改写（一次性锚点；已在场会报 already applied）
 node build/generate-commands.mjs     # 重新生成 39 个命令
-node build/generate-repo-docs.mjs    # 重新生成 .claude/CLAUDE.md 与 agents/ 镜像
+node build/generate-repo-docs.mjs    # 重新同步 agents/ 镜像
 node build/refresh-content-locks.mjs # 先看报告，确认每一处字节差异都是有意为之，再 --write
 npm run check && npm run check:upstream
 ```

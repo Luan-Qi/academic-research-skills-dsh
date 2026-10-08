@@ -210,15 +210,13 @@ node build/audit-refs.mjs                                      # 本包
    （没有 agent 注册表、没有 per-agent 白名单），改动**零收益**却破坏了上游的冻结形式
    检查，还让随包 agent 文件无谓地偏离上游镜像 → 已回退，并在
    `normalize-host.mjs` 里**保留为 disabled 规则 + 原因注释**，免得下一个人重蹈。
-2. **补回守卫**：新增 `build/generate-repo-docs.mjs` 生成两个上游 lint 钉住的仓库级文件——
-   - `.claude/CLAUDE.md`：把**路由核心块从 `shared/references/routing_core.md` 逐字节抽取**写入，
-     于是 `check_routing_core_sync.py` 恢复工作（现在输出
-     `OK (6 copies match shared/references/routing_core.md)`）。路由核心是承重机制
-     （它决定请求直接进技能还是先问用户要哪个工作流，即 #133 防的那个失效），
-     所以这个跨副本守卫值得救活。文件里同时写明它在 DSH 上是惰性的，
-     并带 Suite version / Last Updated / 技能版本表（均由 CITATION.cff 与各 SKILL.md 动态读出，不会漂）。
+2. **补回守卫**：新增 `build/generate-repo-docs.mjs` 同步上游 lint 钉住的仓库级文件——
    - `agents/`：把上游点名的 4 个可派发角色按**字节一致**同步过来
      （上游自己的说明就是 `cp <source> <mirror>`），`check_agents_mirror_sync.py` 恢复通过。
+   - `.claude/CLAUDE.md`：当时也生成了它（把路由核心块从 `shared/references/routing_core.md`
+     逐字节抽取写入），好让 `check_routing_core_sync.py` 能用。
+     **后来按用户决定移除了**——在一个 DSH 插件里放 Claude Code 的仓库级文档是误导性的，
+     而它换来的只是一个上游 lint。守卫本身没有丢，见下面 P19。
 3. **内容锁按上游规定流程重钉**：新增 `build/refresh-content-locks.mjs`，
    先逐条报告哪几个面漂移，再 `--write` 才会移动 pin——移动 pin 等于宣称
    “每一字节差异都是有意为之”。
@@ -234,16 +232,32 @@ node build/audit-refs.mjs                                      # 本包
 
 15 条“不适用”里，理由分四类：需要 Claude Code 打包（`.claude-plugin/`）、
 需要 `.github/workflows/`、需要 `hooks/`、需要上游完整仓库（`tests/`、`evals/`、`pi/`、
-多语言 README），以及**要求写入 DSH 不能有的两个替换变量**
+多语言 README）、需要 `.claude/CLAUDE.md`（P19），以及**要求写入 DSH 不能有的两个替换变量**
 （`check_command_skill_dispatch.py` 要求 `${CLAUDE_PLUGIN_ROOT}/` 与
 `academic-research-skills:<skill>`；`check_v3_6_8_mark_read_commands.py` 要求
 `python3 scripts/ars_mark_read.py $ARGUMENTS`）。后两条**在任何宿主正确的移植里都不可能通过**，
-不是本包的缺陷。
+不是本包的缺陷。因此“覆盖所改表面的守卫”从 11 个变成 **10 个**。
 
 ### P16 自动化检查从 3 个扩到 7 个
 `npm run check` 依次跑：命令无漂移、零悬空引用、注册与模式覆盖、行尾一致（0 CRLF）、
 生成文件无漂移、内容锁未漂移、**编码完整（无非法 UTF-8 / 无未解释的 U+FFFD）**。
 另有 `npm run check:upstream` 跑上游 lint 分类门禁。
+
+### P19 【决定】不提供 `.claude/CLAUDE.md`，路由核心守卫改由本包自己的校验承担
+- **决定**：用户明确要求不保留 `.claude/CLAUDE.md`。（在一个 DeepSeek Harness 插件里放
+  Claude Code 的仓库级文档确实是误导性的；它存在的唯一理由是喂饱上游一个 lint。）
+- **代价与补偿**：上游 `scripts/check_routing_core_sync.py` 把该文件当作路由核心块的载体之一，
+  缺了它会直接以 exit 2 退出（"required file missing"），于是这条 lint 不再可用。
+  但**守卫本身没丢**：`build/validate-skills.mjs` 现在自己抽取
+  `shared/references/routing_core.md` 的标记块，断言它在**全部 5 个 `SKILL.md` 里逐字节一致**，
+  并输出 `routing-core: 5/5 SKILL.md copies byte-identical`。这正是上游那条 lint 检查的不变量，
+  只是去掉了 `.claude/` 这个载体。
+- **连带改动**：`build/generate-repo-docs.mjs` 只管 `agents/` 镜像了（不再需要
+  CITATION.cff / CHANGELOG 的版本解析）；`build/run-upstream-lints.mjs` 把
+  `check_routing_core_sync.py` 从 REQUIRED_PASS 移到 NOT_APPLICABLE 并写明理由；
+  `agents/` 镜像保留（上游点名的 4 个可派发角色，字节一致，`check_agents_mirror_sync.py` 通过）。
+- **验证**：`npm run check` 与 `npm run check:upstream` 均 exit 0；
+  上游 lint 分类为 49 通过 · 0 回归 · 15 不适用 · 52 未分类。
 
 ### P17 【架构】从「嵌入注册」改成「磁盘支撑的 provider」
 - **触发**：用户指出技能是 `source: 'runtime'` 的**嵌入技能**，而非常规用户技能，并列了三个后果。
@@ -467,7 +481,7 @@ node build/normalize-host.mjs        # 宿主 token 级替换（幂等）
 node build/normalize-eol.mjs --write # 收敛到 LF（上游规范）
 node build/port-edits.mjs            # 整段改写（一次性锚点；已在场会报 already applied）
 node build/generate-commands.mjs     # 重新生成 39 个命令
-node build/generate-repo-docs.mjs    # 重新生成 .claude/CLAUDE.md 与 agents/ 镜像
+node build/generate-repo-docs.mjs    # 重新同步 agents/ 镜像
 node build/refresh-content-locks.mjs --write   # 内容锁重钉（仅在确认差异都有意为之之后）
 npm run check
 ```
@@ -480,7 +494,7 @@ npm run check
 | `normalize-eol.mjs` | 行尾收敛到 LF（上游规范），`--write` 才落盘 |
 | `port-edits.mjs` | 7 处整段改写，一次性锚点，命中数不为 1 即报错 |
 | `generate-commands.mjs` | 命令层唯一真源（39 条），`--check` 报漂移与孤儿 |
-| `generate-repo-docs.mjs` | 生成 `.claude/CLAUDE.md`（含逐字节抽取的路由核心块）与 `agents/` 镜像 |
+| `generate-repo-docs.mjs` | 同步 `agents/` 镜像（上游点名的 4 个可派发角色，字节一致） |
 | `refresh-content-locks.mjs` | 报告 / 重钉上游的整文件 sha256 内容锁 |
 | `audit-refs.mjs` | 引用审计，支持 `--root` / `--layout` |
 | `validate-skills.mjs` | 用 mock host 真实调用 `lib/startup.js`，校验注册、frontmatter、hygiene、模式覆盖 |

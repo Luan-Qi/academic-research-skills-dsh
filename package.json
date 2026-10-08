@@ -16,6 +16,7 @@
   "files": [
     "lib",
     "build",
+    "agents",
     "commands",
     "commands-src",
     "deep-research",

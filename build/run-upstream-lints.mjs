@@ -45,7 +45,6 @@ const REQUIRED_PASS = [
   ['check_agents_mirror_sync.py', 'the four rostered agent mirrors match their skill-bundle sources'],
   ['check_tools_allowlist.py', "the agents' frozen `tools:` frontmatter is byte-equal to upstream's form"],
   ['check_pipeline_boundary_semantics.py', 'the five #528 pipeline surfaces match their refreshed content locks'],
-  ['check_routing_core_sync.py', 'the routing core is byte-identical across .claude/CLAUDE.md and all five SKILL.md'],
   ['check_data_access_level.py', 'every skill keeps its declared data_access_level'],
   ['check_instruction_data_boundary.py', 'the canonical instruction/data block is intact in every copy'],
   ['check_model_tiering.py', 'the 43-agent judgment/execution classification still agrees across disk, manifest and table'],
@@ -57,6 +56,8 @@ const REQUIRED_PASS = [
 
 /** Lint -> why it cannot pass on this port. Each reason was verified, not assumed. */
 const NOT_APPLICABLE = {
+  'check_routing_core_sync.py':
+    'requires a `.claude/CLAUDE.md` carrier, which this port deliberately does not ship (a Claude-Code repo doc has no place in a DSH plugin). The block itself is still checked: `build/validate-skills.mjs` asserts the routing-core block is byte-identical across all five SKILL.md copies and present in shared/references/routing_core.md.',
   'check_version_consistency.py':
     'needs `.claude-plugin/{plugin,marketplace}.json` — the Claude Code packaging this port replaces. Shipping it would half-work (our `commands/` are DSH-shaped), so it is deliberately absent. Everything else it checks (suite version, skills table, README badge, CITATION.cff) passes.',
   'check_command_skill_dispatch.py':
