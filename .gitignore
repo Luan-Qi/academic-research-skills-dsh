@@ -1,0 +1,8 @@
+# nothing is generated into the tree by the build scripts except commands/,
+# which is committed on purpose (it is the shipped command layer).
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
+__pycache__/
+*.pyc

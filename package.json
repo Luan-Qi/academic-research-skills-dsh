@@ -1,0 +1,96 @@
+{
+  "name": "academic-research-skills-dsh",
+  "version": "1.0.0",
+  "description": "Academic Research Skills (ARS) v3.23.0 for DeepSeek Harness: all 5 skills (deep-research, academic-paper, academic-paper-reviewer, academic-pipeline, sr-screener), all 35 modes, and 39 /ars-* user-invocable commands, ported from the Claude Code plugin Imbad0202/academic-research-skills (CC-BY-NC-4.0).",
+  "type": "module",
+  "main": "lib/startup.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "exports": {
+    ".": "./lib/startup.js",
+    "./startup": "./lib/startup.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "build",
+    "commands",
+    "commands-src",
+    "deep-research",
+    "academic-paper",
+    "academic-paper-reviewer",
+    "academic-pipeline",
+    "sr-screener",
+    "shared",
+    "scripts",
+    "docs",
+    "examples",
+    "audits",
+    "evals",
+    "MODE_REGISTRY.md",
+    "POSITIONING.md",
+    "CHANGELOG.md",
+    "CITATION.cff",
+    "NOTICE.md",
+    "README.md",
+    "RELEASE.md",
+    "PORTING-NOTES.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "port:normalize": "node build/normalize-host.mjs",
+    "port:edits": "node build/port-edits.mjs",
+    "build:commands": "node build/generate-commands.mjs",
+    "build:repo-docs": "node build/generate-repo-docs.mjs",
+    "check:commands": "node build/generate-commands.mjs --check",
+    "check:refs": "node build/audit-refs.mjs",
+    "check:skills": "node build/validate-skills.mjs",
+    "check:eol": "node build/normalize-eol.mjs",
+    "check:encoding": "node build/check-encoding.mjs",
+    "check:repo-docs": "node build/generate-repo-docs.mjs --check",
+    "check:locks": "node build/refresh-content-locks.mjs",
+    "check:upstream": "node build/run-upstream-lints.mjs",
+    "check": "npm run check:commands && npm run check:refs && npm run check:skills && npm run check:eol && npm run check:encoding && npm run check:repo-docs && npm run check:locks"
+  },
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "academic",
+    "research",
+    "deep-research",
+    "literature-review",
+    "systematic-review",
+    "peer-review",
+    "paper-writing",
+    "scholarly-publishing",
+    "prisma",
+    "citation-verification"
+  ],
+  "author": {
+    "name": "Luan-Qi",
+    "url": "https://github.com/Luan-Qi"
+  },
+  "contributors": [
+    {
+      "name": "Cheng-I Wu",
+      "url": "https://github.com/Imbad0202",
+      "note": "author of the upstream Academic Research Skills suite this package ports"
+    }
+  ],
+  "license": "CC-BY-NC-4.0",
+  "homepage": "https://github.com/Luan-Qi/academic-research-skills-dsh",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Luan-Qi/academic-research-skills-dsh.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Luan-Qi/academic-research-skills-dsh/issues"
+  },
+  "dependencies": {}
+}

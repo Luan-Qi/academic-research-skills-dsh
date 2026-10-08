@@ -1,0 +1,45 @@
+# Line-ending policy for this DSH port.
+#
+# Upstream's own rule, preserved verbatim:
+#
+#   Shell scripts MUST stay LF, even on Windows checkouts. The PreToolUse hook
+#   launcher (hooks/run_guard.sh) and the SessionStart announce hook
+#   (scripts/announce-ars-loaded.sh) are executed via Git Bash on Windows; a CRLF
+#   checkout would break them on the hot path (#454). Scope the rule to *.sh so
+#   existing line-ending behavior for other files is untouched.
+#
+*.sh text eol=lf
+
+# Port addition. Upstream leaves non-`*.sh` files to `text=auto`, so a Windows
+# checkout with `core.autocrlf=true` rewrites every Markdown/Python/JSON file to
+# CRLF. That silently breaks two bundled mechanisms, which is why this port pins
+# LF for the whole tree instead:
+#
+#   * `scripts/check_pipeline_boundary_semantics.py` pins five pipeline surfaces
+#     by WHOLE-FILE sha256, so its locks must not depend on the checkout's
+#     line-ending configuration.
+#   * `scripts/check_tools_allowlist.py` reads the agents' frozen `tools:` line
+#     without universal-newline translation on purpose, so a CRLF file fires it.
+#
+# Keeping the committed bytes LF makes those checks meaningful on every platform
+# and keeps the content locks stable across re-checkouts.
+* text=auto eol=lf
+
+# Binaries are never line-ending-converted.
+*.pdf   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.ico   binary
+*.zip   binary
+*.gz    binary
+*.ttf   binary
+*.otf   binary
+*.ttc   binary
+*.woff  binary
+*.woff2 binary
+*.exe   binary
+*.dll   binary
+*.pyc   binary

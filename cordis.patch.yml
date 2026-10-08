@@ -1,0 +1,32 @@
+# academic-research-skills-dsh bundle patch.
+#
+# Mounts the ARS skill PROVIDER into the profile's layer stack. On load it
+# registers, through `ctx.skills.registerProvider(...)`, a disk-backed source for:
+#
+#   5 model-invocable skills   : deep-research, academic-paper,
+#                                academic-paper-reviewer, academic-pipeline,
+#                                sr-screener
+#   39 user-invocable commands : /ars-full, /ars-dr-quick, /ars-sr-ta-screen, ...
+#
+# into the skill catalog, with no manual skill-root setup.
+#
+# WHY A PROVIDER RATHER THAN `ctx.skills.register()`: `register()` is the
+# registry's embedded path — it captures each body as a string at boot, so edits
+# need a restart and a deleted file stays in the catalog. A provider publishes
+# frontmatter summaries and re-reads each body from disk on every load, and its
+# `control.invalidate()` re-publishes the catalog when files change. See the
+# header of `lib/startup.js` for the full rationale, including the second reason:
+# in a `web` profile `@deepseek-ai/dsh-web-app` ships `skill-filesystem` as
+# `disabled: true`, so there is no scanned skill root to drop folders into.
+#
+# Requires the `skills` service, which dsh-base mounts in every standard profile
+# (row id `skill` -> @deepseek-ai/dsh-skill).
+#
+# Upstream's Claude Code hooks (SessionStart announce, PreToolUse write-scope
+# guard) are deliberately NOT ported: DSH has no hook system, and write protection
+# is DSH's own file sandbox plus its permission policy.
+
+- insert:
+    - id: ars-skills
+      name: 'academic-research-skills-dsh/startup'
+      inject: [skills]
